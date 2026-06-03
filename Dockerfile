@@ -12,8 +12,8 @@ RUN mkdir -p /ComfyUI/models/xlabs/ipadapters && \
          "https://huggingface.co/XLabs-AI/flux-ip-adapter/resolve/main/ip_adapter.safetensors" \
          -O /ComfyUI/models/xlabs/ipadapters/ip_adapter.safetensors
 
-# Download XLabs CLIP vision encoder (must be in flux/ subfolder)
+# Download CLIP-L vision encoder from OpenAI, renamed as XLabs nodes expect
 RUN mkdir -p /ComfyUI/models/clip_vision/flux && \
     wget -q \
-         "https://huggingface.co/XLabs-AI/flux-ip-adapter/resolve/main/clip_vision_l.safetensors" \
+         "https://huggingface.co/openai/clip-vit-large-patch14/resolve/main/model.safetensors" \
          -O /ComfyUI/models/clip_vision/flux/clip_vision_l.safetensors
