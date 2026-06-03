@@ -10,24 +10,10 @@ RUN mkdir -p /comfyui/custom_nodes && \
 # x-flux-comfyui is unmaintained since Oct 2024. ComfyUI 5.x added attn_mask
 # to DoubleStreamBlock.forward() but the IP-Adapter processor forward() methods
 # don't accept it, causing TypeError. Adding attn_mask=None to each signature fixes it.
-RUN python3 -c "
-import pathlib, re
-f = pathlib.Path('/comfyui/custom_nodes/x-flux-comfyui/src/flux/layers.py')
-if f.exists():
-    txt = f.read_text()
-    patched = txt.replace(
-        'def forward(self, attn, img, txt, vec, pe, **attention_kwargs):',
-        'def forward(self, attn, img, txt, vec, pe, attn_mask=None, **attention_kwargs):'
-    )
-    f.write_text(patched)
-    count = patched.count('attn_mask=None')
-    print(f'Patched {count} forward() signatures in layers.py')
-else:
-    print('WARNING: layers.py not found at expected path')
-    import subprocess
-    result = subprocess.run(['find', '/comfyui/custom_nodes/x-flux-comfyui', '-name', 'layers.py'], capture_output=True, text=True)
-    print('Found:', result.stdout)
-"
+RUN sed -i 's/def forward(self, attn, img, txt, vec, pe, \*\*attention_kwargs):/def forward(self, attn, img, txt, vec, pe, attn_mask=None, \*\*attention_kwargs):/g' \
+    /comfyui/custom_nodes/x-flux-comfyui/src/flux/layers.py && \
+    grep -c "attn_mask=None" /comfyui/custom_nodes/x-flux-comfyui/src/flux/layers.py && \
+    echo "layers.py patched successfully"
 
 # Download XLabs IP-Adapter weights
 RUN mkdir -p /comfyui/models/xlabs/ipadapters && \
