@@ -1,4 +1,4 @@
-FROM runpod/worker-comfyui:flux1-dev-fp8
+FROM runpod/worker-comfyui:latest-flux1-dev-fp8
 
 # Install XLabs FLUX IP-Adapter custom nodes
 RUN cd /ComfyUI/custom_nodes && \
