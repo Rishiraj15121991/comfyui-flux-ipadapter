@@ -31,4 +31,6 @@ jobs:
         with:
           context: .
           push: true
-          tags: mak15121991/comfyui-flux-ipadapter:latest
+          tags: |
+            mak15121991/comfyui-flux-ipadapter:latest
+            mak15121991/comfyui-flux-ipadapter:v1.0
