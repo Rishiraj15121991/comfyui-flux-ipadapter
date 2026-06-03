@@ -1,7 +1,8 @@
 FROM runpod/worker-comfyui:latest-flux1-dev-fp8
 
 # Install XLabs FLUX IP-Adapter custom nodes
-RUN cd /ComfyUI/custom_nodes && \
+RUN mkdir -p /ComfyUI/custom_nodes && \
+    cd /ComfyUI/custom_nodes && \
     git clone https://github.com/XLabs-AI/x-flux-comfyui && \
     pip install -r x-flux-comfyui/requirements.txt
 
