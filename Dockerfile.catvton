@@ -1,14 +1,25 @@
 FROM mak15121991/comfyui-flux-ipadapter:latest
 
 # --- CatvtonFlux runtime dependencies ---
-# diffusers is not in the base comfyui image (uses comfy's own model loading)
-# CatvtonFluxWrapper ships its own FluxFillPipeline but still needs these
+# FusedFluxAttnProcessor2_0 exists only in diffusers 0.31.x (added for FLUX.1-Fill-dev,
+# removed in 0.32.0). Anything older (0.30.x) or newer (0.32+) causes a silent
+# ImportError that makes ComfyUI drop every LoadCatvtonFlux / CatvtonFluxSampler node.
 RUN pip install --no-cache-dir \
-    "diffusers==0.30.3" \
-    "transformers==4.44.2" \
-    "accelerate==0.33.0" \
+    "diffusers==0.31.0" \
+    "accelerate>=0.33.0" \
     "sentencepiece" \
     "Pillow"
+
+# --- Verify imports before installing the node ---
+# This step fails the build fast if diffusers is wrong, instead of silently
+# shipping a broken image.
+RUN python3 -c "
+from diffusers.models.attention_processor import FusedFluxAttnProcessor2_0
+from diffusers.models.embeddings import FluxPosEmbed
+from diffusers.models.normalization import AdaLayerNormZeroSingle
+from diffusers.utils import replace_example_docstring
+print('diffusers 0.31.0 imports OK')
+"
 
 # --- Install ComfyUI-CatvtonFluxWrapper custom node ---
 RUN cd /comfyui/custom_nodes && \
