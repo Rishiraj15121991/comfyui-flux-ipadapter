@@ -4,7 +4,7 @@ FROM mak15121991/comfyui-flux-ipadapter:latest
 # diffusers is not in the base comfyui image (uses comfy's own model loading)
 # CatvtonFluxWrapper ships its own FluxFillPipeline but still needs these
 RUN pip install --no-cache-dir \
-    "diffusers>=0.31.0" \
+    "diffusers==0.31.0" \
     "transformers>=4.44.0" \
     "accelerate>=0.33.0" \
     "sentencepiece" \
