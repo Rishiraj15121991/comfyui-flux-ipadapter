@@ -1,0 +1,42 @@
+name: Build & Push comfyui-catvton-flux
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'Dockerfile.catvton'
+      - '.github/workflows/build-catvton.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
+          sudo rm -rf /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.catvton
+          push: true
+          tags: |
+            mak15121991/comfyui-catvton-flux:latest
+          cache-from: type=registry,ref=mak15121991/comfyui-catvton-flux:buildcache
+          cache-to: type=registry,ref=mak15121991/comfyui-catvton-flux:buildcache,mode=max

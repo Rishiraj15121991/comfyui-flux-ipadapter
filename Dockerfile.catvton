@@ -1,0 +1,23 @@
+FROM mak15121991/comfyui-flux-ipadapter:latest
+
+# --- CatvtonFlux runtime dependencies ---
+# diffusers is not in the base comfyui image (uses comfy's own model loading)
+# CatvtonFluxWrapper ships its own FluxFillPipeline but still needs these
+RUN pip install --no-cache-dir \
+    "diffusers>=0.31.0" \
+    "transformers>=4.44.0" \
+    "accelerate>=0.33.0" \
+    "sentencepiece" \
+    "Pillow"
+
+# --- Install ComfyUI-CatvtonFluxWrapper custom node ---
+RUN cd /comfyui/custom_nodes && \
+    git clone https://github.com/lujiazho/ComfyUI-CatvtonFluxWrapper catvton-flux-wrapper && \
+    echo "CatvtonFluxWrapper installed"
+
+# Store HuggingFace model cache inside the container volume so it survives
+# between jobs on the same warm worker. FLUX.1-Fill-dev (~12 GB) downloads
+# on the first call to LoadCatvtonFlux — subsequent jobs on the same worker
+# use the on-disk cache. Set HF_TOKEN env var on the RunPod endpoint.
+ENV HF_HOME=/comfyui/models/hf_cache
+ENV HUGGINGFACE_HUB_VERBOSITY=info
