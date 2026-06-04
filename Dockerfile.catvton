@@ -1,14 +1,19 @@
 FROM mak15121991/comfyui-flux-ipadapter:latest
 
 # --- CatvtonFlux runtime dependencies ---
-# FusedFluxAttnProcessor2_0 exists only in diffusers 0.31.x (added for FLUX.1-Fill-dev,
-# removed in 0.32.0). Anything older (0.30.x) or newer (0.32+) causes a silent
-# ImportError that makes ComfyUI drop every LoadCatvtonFlux / CatvtonFluxSampler node.
+# diffusers 0.31.x is the only version that has FusedFluxAttnProcessor2_0
+# (added for FLUX.1-Fill-dev, removed in 0.32.0 / absent in 0.30.x).
+# The base image ships transformers>=4.47 which removed FLAX_WEIGHTS_NAME;
+# we patch pipeline_loading_utils.py to inline the constant instead.
 RUN pip install --no-cache-dir \
     "diffusers==0.31.0" \
     "accelerate>=0.33.0" \
     "sentencepiece" \
     "Pillow"
+
+# --- Patch diffusers for newer transformers compatibility ---
+COPY catvton_patch.py /tmp/catvton_patch.py
+RUN python3 /tmp/catvton_patch.py
 
 # --- Install ComfyUI-CatvtonFluxWrapper custom node ---
 RUN cd /comfyui/custom_nodes && \
@@ -16,9 +21,6 @@ RUN cd /comfyui/custom_nodes && \
     echo "CatvtonFluxWrapper installed"
 
 # --- Full import test: simulate ComfyUI's custom node loader ---
-# Copies the test script from the build context, then runs it inside /comfyui.
-# Tests the COMPLETE pipeline_flux_fill.py chain including the diffusers monkey-patch.
-# If ANY import in the chain fails this step will fail the build with a visible traceback.
 COPY catvton_build_test.py /tmp/catvton_build_test.py
 RUN cd /comfyui && python3 /tmp/catvton_build_test.py
 
