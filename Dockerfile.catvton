@@ -10,14 +10,17 @@ RUN pip install --no-cache-dir \
     "sentencepiece" \
     "Pillow"
 
-# --- Verify imports before installing the node ---
-# Single-line to avoid Docker mistaking 'from' at line-start as a FROM instruction.
-RUN python3 -c "from diffusers.models.attention_processor import FusedFluxAttnProcessor2_0; from diffusers.models.embeddings import FluxPosEmbed; from diffusers.models.normalization import AdaLayerNormZeroSingle; from diffusers.utils import replace_example_docstring; print('diffusers 0.31.0 imports OK')"
-
 # --- Install ComfyUI-CatvtonFluxWrapper custom node ---
 RUN cd /comfyui/custom_nodes && \
     git clone https://github.com/lujiazho/ComfyUI-CatvtonFluxWrapper catvton-flux-wrapper && \
     echo "CatvtonFluxWrapper installed"
+
+# --- Full import test: simulate ComfyUI's custom node loader ---
+# Copies the test script from the build context, then runs it inside /comfyui.
+# Tests the COMPLETE pipeline_flux_fill.py chain including the diffusers monkey-patch.
+# If ANY import in the chain fails this step will fail the build with a visible traceback.
+COPY catvton_build_test.py /tmp/catvton_build_test.py
+RUN cd /comfyui && python3 /tmp/catvton_build_test.py
 
 # Store HuggingFace model cache inside the container volume so it survives
 # between jobs on the same warm worker. FLUX.1-Fill-dev (~12 GB) downloads
