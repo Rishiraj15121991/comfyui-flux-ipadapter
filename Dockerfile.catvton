@@ -11,15 +11,8 @@ RUN pip install --no-cache-dir \
     "Pillow"
 
 # --- Verify imports before installing the node ---
-# This step fails the build fast if diffusers is wrong, instead of silently
-# shipping a broken image.
-RUN python3 -c "
-from diffusers.models.attention_processor import FusedFluxAttnProcessor2_0
-from diffusers.models.embeddings import FluxPosEmbed
-from diffusers.models.normalization import AdaLayerNormZeroSingle
-from diffusers.utils import replace_example_docstring
-print('diffusers 0.31.0 imports OK')
-"
+# Single-line to avoid Docker mistaking 'from' at line-start as a FROM instruction.
+RUN python3 -c "from diffusers.models.attention_processor import FusedFluxAttnProcessor2_0; from diffusers.models.embeddings import FluxPosEmbed; from diffusers.models.normalization import AdaLayerNormZeroSingle; from diffusers.utils import replace_example_docstring; print('diffusers 0.31.0 imports OK')"
 
 # --- Install ComfyUI-CatvtonFluxWrapper custom node ---
 RUN cd /comfyui/custom_nodes && \
