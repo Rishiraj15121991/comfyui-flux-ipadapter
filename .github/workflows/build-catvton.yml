@@ -1,5 +1,11 @@
 name: Build & Push comfyui-catvton-flux
 
+# NOTE: This image bakes ~36 GB of HuggingFace models into the layers.
+# Final compressed image is ~40 GB. GitHub Actions free runners (~14 GB disk)
+# WILL run out of space. Build locally with build_local_v9.ps1 instead,
+# or use a self-hosted runner / paid large runner.
+# This workflow is kept for reference and self-hosted runner use.
+
 on:
   push:
     branches: [master]
@@ -19,6 +25,9 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
           sudo rm -rf /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/local/share/chromium /usr/local/share/powershell
+          sudo apt-get clean
+          docker image prune -af || true
           df -h
 
       - name: Log in to Docker Hub
@@ -36,8 +45,10 @@ jobs:
           context: .
           file: Dockerfile.catvton
           push: true
+          build-args: |
+            HF_TOKEN=${{ secrets.HF_TOKEN }}
           tags: |
             mak15121991/comfyui-catvton-flux:latest
-            mak15121991/comfyui-catvton-flux:v8
+            mak15121991/comfyui-catvton-flux:v9
           cache-from: type=registry,ref=mak15121991/comfyui-catvton-flux:buildcache
           cache-to: type=registry,ref=mak15121991/comfyui-catvton-flux:buildcache,mode=max

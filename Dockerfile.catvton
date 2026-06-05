@@ -9,7 +9,37 @@ RUN pip install --no-cache-dir \
     "diffusers==0.31.0" \
     "accelerate>=0.33.0" \
     "sentencepiece" \
-    "Pillow"
+    "Pillow" \
+    "hf_transfer" \
+    "huggingface_hub>=0.23"
+
+# HuggingFace cache inside the image layers (baked at build time)
+ENV HF_HOME=/root/.cache/huggingface
+ENV HF_HUB_ENABLE_HF_TRANSFER=1
+ENV HUGGINGFACE_HUB_VERBOSITY=info
+
+# --- Accept HF token as a build secret (not stored in final image env) ---
+# Build with: docker build --secret id=hf_token,env=HF_TOKEN ...
+# GitHub Actions: uses docker/build-push-action secrets: block
+ARG HF_TOKEN
+ENV HF_TOKEN=$HF_TOKEN
+
+# --- Pre-bake FLUX.1-Fill-dev (~12 GB) + catvton-flux-beta (~24 GB) ---
+# Both models land in /root/.cache/huggingface and are committed as image layers.
+# RunPod workers skip all HuggingFace downloads — models are already on disk.
+RUN python3 -c "\
+from huggingface_hub import snapshot_download; \
+import os; \
+token = os.getenv('HF_TOKEN'); \
+print('Downloading FLUX.1-Fill-dev (~12 GB)...'); \
+snapshot_download(repo_id='black-forest-labs/FLUX.1-Fill-dev', token=token, ignore_patterns=['*.gguf']); \
+print('Downloading catvton-flux-beta (~24 GB)...'); \
+snapshot_download(repo_id='xiaozaa/catvton-flux-beta', token=token); \
+print('Model bake complete.'); \
+"
+
+# Clear token from runtime environment after baking
+ENV HF_TOKEN=
 
 # --- Patch diffusers for newer transformers compatibility ---
 COPY catvton_patch.py /tmp/catvton_patch.py
@@ -20,13 +50,6 @@ RUN cd /comfyui/custom_nodes && \
     git clone https://github.com/lujiazho/ComfyUI-CatvtonFluxWrapper catvton-flux-wrapper && \
     echo "CatvtonFluxWrapper installed"
 
-# --- Full import test: simulate ComfyUI's custom node loader ---
+# --- Build-time import test (diffusers chain only — GPU not available in CI) ---
 COPY catvton_build_test.py /tmp/catvton_build_test.py
 RUN cd /comfyui && python3 /tmp/catvton_build_test.py
-
-# Store HuggingFace model cache inside the container volume so it survives
-# between jobs on the same warm worker. FLUX.1-Fill-dev (~12 GB) downloads
-# on the first call to LoadCatvtonFlux — subsequent jobs on the same worker
-# use the on-disk cache. Set HF_TOKEN env var on the RunPod endpoint.
-ENV HF_HOME=/comfyui/models/hf_cache
-ENV HUGGINGFACE_HUB_VERBOSITY=info
