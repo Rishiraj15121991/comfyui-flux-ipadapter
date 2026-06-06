@@ -26,11 +26,11 @@ if (-not $HF_TOKEN) {
 }
 
 $IMAGE = "mak15121991/comfyui-catvton-flux"
-$TAG = "v9"
+$TAG = "v18-full-bake"
 
 Set-Location $PSScriptRoot
 
-Write-Host "Building $IMAGE:$TAG (downloads ~36 GB of HuggingFace models)..."
+Write-Host "Building ${IMAGE}:${TAG} (downloads ~36 GB of HuggingFace models)..."
 Write-Host "Estimated time: 30-60 minutes"
 Write-Host ""
 
@@ -47,7 +47,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "Pushing $IMAGE:$TAG ..."
+Write-Host "Pushing ${IMAGE}:${TAG} ..."
 docker push "${IMAGE}:${TAG}"
 docker push "${IMAGE}:latest"
 

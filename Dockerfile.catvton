@@ -13,33 +13,71 @@ RUN pip install --no-cache-dir \
     "hf_transfer" \
     "huggingface_hub>=0.23"
 
-# HuggingFace cache inside the image layers (baked at build time)
+# HuggingFace cache inside the image layers (baked at build time).
+# HUGGINGFACE_HUB_CACHE is set explicitly to override any value from the base
+# image (runpod/worker-comfyui may point it at /workspace which is a Docker
+# VOLUME — writes there during RUN steps are discarded and never committed).
 ENV HF_HOME=/root/.cache/huggingface
+ENV HUGGINGFACE_HUB_CACHE=/root/.cache/huggingface/hub
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
 ENV HUGGINGFACE_HUB_VERBOSITY=info
 
-# --- Accept HF token as a build secret (not stored in final image env) ---
-# Build with: docker build --secret id=hf_token,env=HF_TOKEN ...
-# GitHub Actions: uses docker/build-push-action secrets: block
 ARG HF_TOKEN
 ENV HF_TOKEN=$HF_TOKEN
 
-# --- Pre-bake FLUX.1-Fill-dev (~12 GB) + catvton-flux-beta (~24 GB) ---
-# Both models land in /root/.cache/huggingface and are committed as image layers.
-# RunPod workers skip all HuggingFace downloads — models are already on disk.
-RUN python3 -c "\
-from huggingface_hub import snapshot_download; \
-import os; \
-token = os.getenv('HF_TOKEN'); \
-print('Downloading FLUX.1-Fill-dev (~12 GB)...'); \
-snapshot_download(repo_id='black-forest-labs/FLUX.1-Fill-dev', token=token, ignore_patterns=['*.gguf']); \
-print('Downloading catvton-flux-lora-alpha (717 MB LoRA)...'); \
-snapshot_download(repo_id='xiaozaa/catvton-flux-lora-alpha', revision='c1e2409ea9124f6397a85afbd85e509e72929c43', token=token); \
-print('Model bake complete.'); \
-"
+# --- Pre-bake FLUX.1-Fill-dev (~12 GB) + catvton-flux-lora-alpha (717 MB) ---
+# cache_dir is passed explicitly so downloads land at the path above, not at
+# whatever HUGGINGFACE_HUB_CACHE was before this ENV instruction takes effect.
+# refs/main is written for both models so HF_HUB_OFFLINE=1 can resolve the
+# default revision="main" without network access at runtime.
+RUN python3 - <<'PY'
+import os
+from pathlib import Path
+from huggingface_hub import snapshot_download
+
+token     = os.getenv('HF_TOKEN') or None
+hub_cache = Path('/root/.cache/huggingface/hub')
+
+# 1 — FLUX.1-Fill-dev (~12 GB)
+print('Downloading FLUX.1-Fill-dev (~12 GB)...')
+snap_flux = snapshot_download(
+    repo_id='black-forest-labs/FLUX.1-Fill-dev',
+    token=token,
+    ignore_patterns=['*.gguf'],
+    cache_dir=str(hub_cache),
+)
+flux_base = hub_cache / 'models--black-forest-labs--FLUX.1-Fill-dev'
+flux_snap = Path(snap_flux).name
+(flux_base / 'refs').mkdir(parents=True, exist_ok=True)
+(flux_base / 'refs' / 'main').write_text(flux_snap)
+assert (flux_base / 'refs' / 'main').read_text().strip() == flux_snap
+assert (Path(snap_flux) / 'model_index.json').exists(), 'model_index.json missing'
+print(f'[OK] FLUX.1-Fill-dev baked + refs/main -> {flux_snap[:8]}')
+
+# 2 — catvton-flux-lora-alpha (717 MB LoRA)
+lora_revision = 'c1e2409ea9124f6397a85afbd85e509e72929c43'
+print('Downloading catvton-flux-lora-alpha (717 MB)...')
+snap_lora = snapshot_download(
+    repo_id='xiaozaa/catvton-flux-lora-alpha',
+    revision=lora_revision,
+    token=token,
+    cache_dir=str(hub_cache),
+)
+lora_base = hub_cache / 'models--xiaozaa--catvton-flux-lora-alpha'
+(lora_base / 'refs').mkdir(parents=True, exist_ok=True)
+(lora_base / 'refs' / 'main').write_text(lora_revision)
+assert (lora_base / 'refs' / 'main').read_text().strip() == lora_revision
+assert (Path(snap_lora) / 'pytorch_lora_weights.safetensors').exists(), 'LoRA weights missing'
+print(f'[OK] catvton-flux-lora-alpha baked + refs/main -> {lora_revision[:8]}')
+
+print('--- Model bake complete ---')
+PY
 
 # Clear token from runtime environment after baking
 ENV HF_TOKEN=
+
+# --- Upgrade RunPod SDK (fixes dispatch bug in 1.6.x) ---
+RUN pip install --no-cache-dir "runpod==1.7.4"
 
 # --- Patch diffusers for newer transformers compatibility ---
 COPY catvton_patch.py /tmp/catvton_patch.py
