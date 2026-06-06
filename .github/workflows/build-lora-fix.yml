@@ -47,7 +47,7 @@ jobs:
             LORA_BUST=${{ github.run_id }}
           tags: |
             mak15121991/comfyui-catvton-flux:latest
-            mak15121991/comfyui-catvton-flux:v13-lora-hub-path
+            mak15121991/comfyui-catvton-flux:v14-lora-refs-main
           cache-from: |
             type=registry,ref=mak15121991/comfyui-catvton-flux:buildcache
             type=registry,ref=mak15121991/comfyui-catvton-flux:latest

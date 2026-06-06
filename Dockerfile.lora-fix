@@ -1,16 +1,19 @@
-# LoRA fix: add catvton-flux-lora-alpha (717 MB) on top of the working v10 image.
-# Replaces implicit HF_HOME-based lookup with explicit cache_dir + hard verification.
+# LoRA fix: bake catvton-flux-lora-alpha into the correct HF hub cache path.
+#
+# Three things required for offline resolution (HF_HUB_OFFLINE=1):
+#   1. cache_dir = $HF_HOME/hub  (not $HF_HOME — node uses $HF_HOME/hub at runtime)
+#   2. snapshot present at hub/models--org--repo/snapshots/<hash>/
+#   3. hub/models--org--repo/refs/main containing the commit hash
+#      (node calls lora_state_dict() with no revision → defaults to "main")
 FROM mak15121991/comfyui-catvton-flux:latest
 
 ARG HF_TOKEN
 ENV HF_TOKEN=$HF_TOKEN
-
-# Keep consistent with template env
 ENV HF_HOME=/root/.cache/huggingface
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
 
-# Bump LORA_BUST to force this layer to re-run (bypass Docker layer cache)
-ARG LORA_BUST=2
+# Bump to force Docker layer cache miss on every CI run
+ARG LORA_BUST=4
 
 RUN python3 - <<'PY'
 import os
@@ -19,24 +22,33 @@ from huggingface_hub import snapshot_download
 
 repo_id  = "xiaozaa/catvton-flux-lora-alpha"
 revision = "c1e2409ea9124f6397a85afbd85e509e72929c43"
-cache_dir = "/root/.cache/huggingface/hub"
-token = os.getenv("HF_TOKEN") or None
+hub_cache = Path("/root/.cache/huggingface/hub")
 
-print(f"Downloading {repo_id} @ {revision[:8]} into {cache_dir} ...")
+print(f"--- Downloading {repo_id} @ {revision[:8]} ---")
 snap = snapshot_download(
     repo_id=repo_id,
     revision=revision,
-    cache_dir=cache_dir,
-    token=token,
+    cache_dir=str(hub_cache),
+    token=os.getenv("HF_TOKEN") or None,
 )
 print(f"Snapshot dir: {snap}")
 
+# 1) Verify the weights file actually landed
 lora = Path(snap) / "pytorch_lora_weights.safetensors"
-if not lora.exists():
-    raise FileNotFoundError(f"BAKE FAILED: {lora} not found — aborting build")
+assert lora.exists(), f"BAKE FAILED: {lora} missing after download"
+print(f"[OK] pytorch_lora_weights.safetensors ({lora.stat().st_size // 1024 // 1024} MB)")
 
-size_mb = lora.stat().st_size // (1024 * 1024)
-print(f"Verified OK: pytorch_lora_weights.safetensors ({size_mb} MB)")
+# 2) Write refs/main so offline revision="main" resolution finds the snapshot.
+#    Without this, HF_HUB_OFFLINE=1 + default revision=None (→ "main") fails
+#    even though the snapshot exists, because there's no refs/main pointer.
+base     = hub_cache / "models--xiaozaa--catvton-flux-lora-alpha"
+refs_dir = base / "refs"
+refs_dir.mkdir(parents=True, exist_ok=True)
+(refs_dir / "main").write_text(revision)
+assert (refs_dir / "main").read_text().strip() == revision
+print(f"[OK] refs/main -> {revision[:8]}")
+
+print("--- LoRA bake complete ---")
 PY
 
 ENV HF_TOKEN=
