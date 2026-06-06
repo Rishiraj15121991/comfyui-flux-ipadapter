@@ -1,0 +1,62 @@
+# v15 — Write refs/main for FLUX.1-Fill-dev so offline revision resolution works.
+#
+# The base image (v14-lora-refs-main) already has FLUX.1-Fill-dev baked in at:
+#   /root/.cache/huggingface/hub/models--black-forest-labs--FLUX.1-Fill-dev/snapshots/<hash>/
+# but the refs/main pointer may be absent, causing diffusers to fail with
+# "revision 'main' not found" when running in offline/cached mode.
+#
+# Same pattern that fixed catvton-flux-lora-alpha in v14.
+FROM mak15121991/comfyui-catvton-flux:v14-lora-refs-main
+
+# Bump to force Docker layer cache miss
+ARG REFS_BUST=1
+
+RUN python3 - <<'PY'
+from pathlib import Path
+import sys
+
+# Check hub cache first, then bare cache root (handles both bake layouts).
+hub_root = Path("/root/.cache/huggingface/hub")
+bare_root = Path("/root/.cache/huggingface")
+
+model_dir = None
+for candidate in [hub_root / "models--black-forest-labs--FLUX.1-Fill-dev",
+                  bare_root / "models--black-forest-labs--FLUX.1-Fill-dev"]:
+    if candidate.exists():
+        model_dir = candidate
+        print(f"Found FLUX.1-Fill-dev at: {candidate}")
+        break
+
+if model_dir is None:
+    print("ERROR: models--black-forest-labs--FLUX.1-Fill-dev not found in either cache location")
+    print(f"  checked: {hub_root}")
+    print(f"  checked: {bare_root}")
+    sys.exit(1)
+
+snapshots_dir = model_dir / "snapshots"
+if not snapshots_dir.exists():
+    print(f"ERROR: Missing snapshots dir: {snapshots_dir}")
+    sys.exit(1)
+
+hashes = sorted(d.name for d in snapshots_dir.iterdir() if d.is_dir())
+if not hashes:
+    print(f"ERROR: No snapshots found in {snapshots_dir}")
+    sys.exit(1)
+if len(hashes) > 1:
+    print(f"[WARN] Multiple snapshots: {hashes} — using most recent: {hashes[-1]}")
+
+snapshot_hash = hashes[-1]
+
+# Sanity check: confirm model_index.json exists (diffusers pipeline marker)
+model_index = snapshots_dir / snapshot_hash / "model_index.json"
+if not model_index.exists():
+    print(f"[WARN] model_index.json missing at {model_index} — continuing anyway")
+
+# Write refs/main
+refs_dir = model_dir / "refs"
+refs_dir.mkdir(parents=True, exist_ok=True)
+(refs_dir / "main").write_text(snapshot_hash)
+assert (refs_dir / "main").read_text().strip() == snapshot_hash
+print(f"[OK] refs/main -> {snapshot_hash[:12]} (FLUX.1-Fill-dev)")
+print("--- FLUX.1-Fill-dev refs/main fix complete ---")
+PY

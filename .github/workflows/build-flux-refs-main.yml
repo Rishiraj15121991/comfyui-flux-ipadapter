@@ -1,0 +1,60 @@
+name: Build & Push comfyui-catvton-flux (v15 — FLUX refs/main fix)
+
+# Thin layer on top of v14-lora-refs-main.
+# Writes refs/main pointer for FLUX.1-Fill-dev so offline revision resolution
+# works. No model downloads — free runners handle this fine.
+#
+# IMPORTANT: Only pushes v15-flux-refs-main tag. Does NOT update :latest.
+# Update :latest manually from a dedicated release workflow once validated.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'Dockerfile.flux-refs-main'
+      - '.github/workflows/build-flux-refs-main.yml'
+  workflow_dispatch:
+    inputs:
+      bust:
+        description: 'Cache bust value (increment to force rebuild)'
+        default: '1'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
+          sudo rm -rf /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/local/share/chromium /usr/local/share/powershell
+          sudo apt-get clean
+          docker image prune -af || true
+          df -h
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push (v15-flux-refs-main only — no :latest)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.flux-refs-main
+          push: true
+          build-args: |
+            REFS_BUST=${{ github.event.inputs.bust || github.run_id }}
+          tags: |
+            mak15121991/comfyui-catvton-flux:v15-flux-refs-main
+          cache-from: |
+            type=registry,ref=mak15121991/comfyui-catvton-flux:buildcache
+            type=registry,ref=mak15121991/comfyui-catvton-flux:v14-lora-refs-main
+          cache-to: type=registry,ref=mak15121991/comfyui-catvton-flux:buildcache,mode=max
