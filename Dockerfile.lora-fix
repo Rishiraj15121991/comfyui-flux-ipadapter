@@ -1,0 +1,20 @@
+# LoRA fix: swap catvton-flux-beta (full sharded 23.8 GB) for the LoRA adapter
+# that LoadCatvtonFlux actually expects (xiaozaa/catvton-flux-lora-alpha, 717 MB).
+# Builds as a thin layer on top of the working v10 image (runpod==1.7.4 already patched).
+FROM mak15121991/comfyui-catvton-flux:latest
+
+ARG HF_TOKEN
+ENV HF_TOKEN=$HF_TOKEN
+ENV HF_HOME=/root/.cache/huggingface
+ENV HF_HUB_ENABLE_HF_TRANSFER=1
+
+RUN python3 -c "\
+from huggingface_hub import snapshot_download; \
+import os; \
+token = os.getenv('HF_TOKEN') or None; \
+print('Downloading catvton-flux-lora-alpha (717 MB, pinned)...'); \
+snapshot_download(repo_id='xiaozaa/catvton-flux-lora-alpha', revision='c1e2409ea9124f6397a85afbd85e509e72929c43', token=token); \
+print('LoRA bake complete.'); \
+"
+
+ENV HF_TOKEN=
