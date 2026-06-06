@@ -19,7 +19,7 @@ from huggingface_hub import snapshot_download
 
 repo_id  = "xiaozaa/catvton-flux-lora-alpha"
 revision = "c1e2409ea9124f6397a85afbd85e509e72929c43"
-cache_dir = "/root/.cache/huggingface"
+cache_dir = "/root/.cache/huggingface/hub"
 token = os.getenv("HF_TOKEN") or None
 
 print(f"Downloading {repo_id} @ {revision[:8]} into {cache_dir} ...")
