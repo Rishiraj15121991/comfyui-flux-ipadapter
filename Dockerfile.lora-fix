@@ -1,20 +1,42 @@
-# LoRA fix: swap catvton-flux-beta (full sharded 23.8 GB) for the LoRA adapter
-# that LoadCatvtonFlux actually expects (xiaozaa/catvton-flux-lora-alpha, 717 MB).
-# Builds as a thin layer on top of the working v10 image (runpod==1.7.4 already patched).
+# LoRA fix: add catvton-flux-lora-alpha (717 MB) on top of the working v10 image.
+# Replaces implicit HF_HOME-based lookup with explicit cache_dir + hard verification.
 FROM mak15121991/comfyui-catvton-flux:latest
 
 ARG HF_TOKEN
 ENV HF_TOKEN=$HF_TOKEN
+
+# Keep consistent with template env
 ENV HF_HOME=/root/.cache/huggingface
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
 
-RUN python3 -c "\
-from huggingface_hub import snapshot_download; \
-import os; \
-token = os.getenv('HF_TOKEN') or None; \
-print('Downloading catvton-flux-lora-alpha (717 MB, pinned)...'); \
-snapshot_download(repo_id='xiaozaa/catvton-flux-lora-alpha', revision='c1e2409ea9124f6397a85afbd85e509e72929c43', token=token); \
-print('LoRA bake complete.'); \
-"
+# Bump LORA_BUST to force this layer to re-run (bypass Docker layer cache)
+ARG LORA_BUST=2
+
+RUN python3 - <<'PY'
+import os
+from pathlib import Path
+from huggingface_hub import snapshot_download
+
+repo_id  = "xiaozaa/catvton-flux-lora-alpha"
+revision = "c1e2409ea9124f6397a85afbd85e509e72929c43"
+cache_dir = "/root/.cache/huggingface"
+token = os.getenv("HF_TOKEN") or None
+
+print(f"Downloading {repo_id} @ {revision[:8]} into {cache_dir} ...")
+snap = snapshot_download(
+    repo_id=repo_id,
+    revision=revision,
+    cache_dir=cache_dir,
+    token=token,
+)
+print(f"Snapshot dir: {snap}")
+
+lora = Path(snap) / "pytorch_lora_weights.safetensors"
+if not lora.exists():
+    raise FileNotFoundError(f"BAKE FAILED: {lora} not found — aborting build")
+
+size_mb = lora.stat().st_size // (1024 * 1024)
+print(f"Verified OK: pytorch_lora_weights.safetensors ({size_mb} MB)")
+PY
 
 ENV HF_TOKEN=
