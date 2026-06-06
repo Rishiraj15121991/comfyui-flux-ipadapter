@@ -11,7 +11,7 @@ ENV HF_HOME=/root/.cache/huggingface
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
 
 # Bump to force Docker layer cache miss on every CI run
-ARG LORA_BUST=7
+ARG LORA_BUST=8
 
 # Part 1 — download LoRA + write refs/main for catvton-flux-lora-alpha
 RUN python3 - <<'PY'
@@ -51,55 +51,60 @@ print("--- LoRA bake complete ---")
 PY
 
 # Part 2 — write refs/main for FLUX.1-Fill-dev (weights already in base image, no download)
-# Searches multiple possible HF cache locations because Dockerfile.catvton downloaded
-# without an explicit cache_dir, so the exact path is not guaranteed.
+# v17: dump all HF env vars + search entire filesystem — no path assumptions.
 RUN python3 - <<'PY'
 import os, subprocess
 from pathlib import Path
 
-hf_home = Path(os.environ.get('HF_HOME', '/root/.cache/huggingface'))
-target  = "models--black-forest-labs--FLUX.1-Fill-dev"
+# Dump HF-related env so we can see exactly where the base image stores its cache
+print("=== HF/CACHE ENV ===")
+for k, v in sorted(os.environ.items()):
+    if any(x in k.upper() for x in ['HF', 'HUGGING', 'CACHE', 'HOME', 'TRANSFORMERS']):
+        print(f"  {k}={v}")
+print("====================")
 
-# Search the two most likely locations first, then fall back to find(1)
-candidates_base = [hf_home / "hub" / target, hf_home / target]
-found_base = next((p for p in candidates_base if p.exists()), None)
+# Search entire filesystem for model_index.json inside FLUX.1-Fill-dev snapshots
+print("Searching filesystem for FLUX.1-Fill-dev model_index.json ...")
+result = subprocess.run(
+    ["find", "/", "-path",
+     "*/models--black-forest-labs--FLUX.1-Fill-dev/snapshots/*/model_index.json",
+     "-maxdepth", "12"],
+    capture_output=True, text=True, timeout=60,
+)
+print(f"find stdout: {result.stdout.strip()!r}")
+if result.stderr.strip():
+    print(f"find stderr (truncated): {result.stderr.strip()[:300]!r}")
 
-if not found_base:
-    result = subprocess.run(
-        ["find", str(hf_home), "-type", "d", "-name", target, "-maxdepth", "4"],
-        capture_output=True, text=True,
+hits = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+if not hits:
+    # Fallback: just find the directory
+    r2 = subprocess.run(
+        ["find", "/", "-type", "d",
+         "-name", "models--black-forest-labs--FLUX.1-Fill-dev",
+         "-maxdepth", "12"],
+        capture_output=True, text=True, timeout=60,
     )
-    hits = [l.strip() for l in result.stdout.splitlines() if l.strip()]
-    if hits:
-        found_base = Path(hits[0])
-
-if not found_base:
+    print(f"dir search: {r2.stdout.strip()!r}")
     raise RuntimeError(
-        f"FLUX.1-Fill-dev cache dir not found under {hf_home}. "
-        f"Checked: {[str(p) for p in candidates_base]}"
+        "FLUX.1-Fill-dev model_index.json not found anywhere on filesystem. "
+        f"Dir search: {r2.stdout.strip()!r}"
     )
+
+# Derive paths from the found model_index.json location
+model_index_path = Path(hits[0])
+snapshot_dir = model_index_path.parent          # .../snapshots/<hash>/
+chosen       = snapshot_dir.name                 # the commit hash
+found_base   = snapshot_dir.parent.parent        # models--black-forest-labs--FLUX.1-Fill-dev/
 
 print(f"[OK] FLUX.1-Fill-dev cache root: {found_base}")
-snapshots_dir = found_base / "snapshots"
-refs_dir      = found_base / "refs"
+print(f"[OK] Snapshot hash: {chosen[:12]}")
 
-if not snapshots_dir.exists():
-    raise RuntimeError(f"snapshots dir missing inside {found_base}")
-
-snaps = [p for p in snapshots_dir.iterdir() if p.is_dir()]
-if not snaps:
-    raise RuntimeError(f"No snapshot subdirs in {snapshots_dir}")
-
-chosen = (snaps[0] if len(snaps) == 1 else max(snaps, key=lambda p: p.stat().st_mtime)).name
+refs_dir = found_base / "refs"
 refs_dir.mkdir(parents=True, exist_ok=True)
 (refs_dir / "main").write_text(chosen)
 assert (refs_dir / "main").read_text().strip() == chosen
-print(f"[OK] FLUX.1-Fill-dev refs/main -> {chosen[:8]}")
-
-model_index = snapshots_dir / chosen / "model_index.json"
-if not model_index.exists():
-    raise RuntimeError(f"model_index.json missing — snapshot may be corrupt: {snapshots_dir / chosen}")
-print("[OK] model_index.json found")
+print(f"[OK] refs/main -> {chosen[:8]}")
+print("[OK] model_index.json confirmed")
 print("--- FLUX.1-Fill-dev ref fix complete ---")
 PY
 
