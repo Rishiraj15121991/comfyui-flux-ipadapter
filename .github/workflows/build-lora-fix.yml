@@ -1,6 +1,6 @@
-name: Build & Push comfyui-catvton-flux (LoRA fix)
+name: Build & Push comfyui-catvton-flux (LoRA + FLUX refs fix)
 
-# Thin layer on top of :latest — just adds xiaozaa/catvton-flux-lora-alpha (717 MB).
+# Thin layer on top of :latest — adds LoRA (717 MB) + writes refs/main for FLUX.1-Fill-dev.
 # Free runners handle this fine (no 40 GB model download required).
 
 on:
@@ -47,7 +47,7 @@ jobs:
             LORA_BUST=${{ github.run_id }}
           tags: |
             mak15121991/comfyui-catvton-flux:latest
-            mak15121991/comfyui-catvton-flux:v14-lora-refs-main
+            mak15121991/comfyui-catvton-flux:v15-flux-refs-main
           cache-from: |
             type=registry,ref=mak15121991/comfyui-catvton-flux:buildcache
             type=registry,ref=mak15121991/comfyui-catvton-flux:latest
