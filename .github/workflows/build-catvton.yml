@@ -49,6 +49,6 @@ jobs:
             HF_TOKEN=${{ secrets.HF_TOKEN }}
           tags: |
             mak15121991/comfyui-catvton-flux:latest
-            mak15121991/comfyui-catvton-flux:v9
+            mak15121991/comfyui-catvton-flux:v18-full-bake
           cache-from: type=registry,ref=mak15121991/comfyui-catvton-flux:buildcache
           cache-to: type=registry,ref=mak15121991/comfyui-catvton-flux:buildcache,mode=max
