@@ -1,0 +1,2 @@
+FROM mak15121991/comfyui-catvton-flux:latest
+RUN pip install --upgrade "runpod==1.7.4"
