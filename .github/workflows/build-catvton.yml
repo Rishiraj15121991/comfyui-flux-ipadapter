@@ -17,8 +17,6 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - uses: actions/checkout@v4
-
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
         with:
@@ -30,7 +28,9 @@ jobs:
           remove-codeql: 'true'
           remove-docker-images: 'true'
 
-      - name: Free additional disk space
+      - uses: actions/checkout@v4
+
+      - name: Report free disk space
         run: |
           sudo rm -rf /usr/local/share/chromium /usr/local/share/powershell
           sudo apt-get clean
